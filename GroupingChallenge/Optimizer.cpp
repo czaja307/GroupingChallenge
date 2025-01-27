@@ -5,9 +5,10 @@ using namespace NGroupingChallenge;
 COptimizer::COptimizer(CGroupingEvaluator& cEvaluator)
     : c_evaluator(cEvaluator) {
     random_device c_seed_generator;
-    c_random_engine.seed(c_seed_generator());
-
-	i_greedy_counter = 0;
+    // TODO: change this
+    //c_random_engine.seed(c_seed_generator());
+    c_random_engine.seed(0);
+	
 }
 
 COptimizer::~COptimizer()
@@ -16,78 +17,95 @@ COptimizer::~COptimizer()
 		delete v_population[i];
 	}
 	v_population.clear();
+
+	delete c_better_evaluator;
 }
 
 void COptimizer::vInitialize() {
     d_current_best_fitness = std::numeric_limits<double>::max();
-
     v_current_best.clear();
     v_current_best.resize(c_evaluator.iGetNumberOfPoints());
-
-    //TODO: get rid of that param
     v_population.clear();
+    i_greedy_counter = 1;
+
+	c_better_evaluator = new CBetterEvaluator(c_evaluator.iGetUpperBound(), c_evaluator.vGetPoints());
+
+
+#pragma omp parallel for
     for (int i = 0; i < POP_SIZE; i++) {
-        // TODO: pushback vs emplace
-        v_population.push_back(new CIndividual(this));
-        v_population.back()->dEvaluate();
+        CIndividual* individual = new CIndividual(this);
+        individual->dEvaluate();
+#pragma omp critical
+        v_population.push_back(individual);
     }
 }
 
 void COptimizer::vRunIteration() {
     vector<CIndividual*> v_new_population;
 
-    uniform_int_distribution<int> individual_dist(0, POP_SIZE - 1);
+    // Parallelize creation of new individuals
+#pragma omp parallel
+    {
+        vector<CIndividual*> thread_population;
 
-    while (v_new_population.size() < POP_SIZE) {
-		CIndividual* parent1 = pcTournament();
-		CIndividual* parent2 = pcTournament();
+#pragma omp for nowait
+        for (int i = 0; i < POP_SIZE / 2; i++) {
+            CIndividual* parent1 = pcTournament();
+            CIndividual* parent2 = pcTournament();
 
-		while (parent1->v_genotype == parent2->v_genotype) {
-            delete parent2; 
-            parent2 = pcTournament();
-		}
+            while (parent1->v_genotype == parent2->v_genotype) {
+                delete parent2;
+                parent2 = pcTournament();
+            }
 
-		CIndividual* child1 = new CIndividual(*parent1);
-		CIndividual* child2 = new CIndividual(*parent2);
-		parent1->vUniformCrossover(parent2, child1, child2);
+            CIndividual* child1 = new CIndividual(*parent1);
+            CIndividual* child2 = new CIndividual(*parent2);
+            parent1->vUniformCrossover(parent2, child1, child2);
 
-		delete parent1;
-		delete parent2;
+            delete parent1;
+            delete parent2;
 
-		child1->vMutate();
-		child2->vMutate();
+            child1->vMutate();
+            child2->vMutate();
 
-		v_new_population.push_back(child1);
-		v_new_population.push_back(child2);
-	}
+            thread_population.push_back(child1);
+            thread_population.push_back(child2);
+        }
 
-	for (int i = 0; i < v_population.size(); i++) {
-		delete v_population[i];
-	}
+#pragma omp critical
+        v_new_population.insert(v_new_population.end(), thread_population.begin(), thread_population.end());
+    }
+
+    for (int i = 0; i < v_population.size(); i++) {
+        delete v_population[i];
+    }
     v_population.swap(v_new_population);
 
-	while (v_population.size() > POP_SIZE) {
-		delete v_population.back();
-		v_population.pop_back();
-	}
+    while (v_population.size() > POP_SIZE) {
+        delete v_population.back();
+        v_population.pop_back();
+    }
 
-	for (int i = 0; i < v_population.size(); i++) {
-		v_population[i]->dEvaluate();
-	}
+    // Parallelize fitness evaluation
+#pragma omp parallel for
+    for (int i = 0; i < v_population.size(); i++) {
+        v_population[i]->dEvaluate();
+    }
 
     if (i_greedy_counter == GREEDY_ITERATIONS) {
         cout << "JAZDA Z KURWAMI AUUUUUU!" << endl;
-		i_greedy_counter = 0;
-		shuffle(v_population.begin(), v_population.end(), c_random_engine);
+        i_greedy_counter = 0;
+        shuffle(v_population.begin(), v_population.end(), c_random_engine);
 
+#pragma omp parallel for
         for (int i = 0; i < GREEDY_INDIVIDUALS; i++) {
-			vFIHC(v_population[i]);
+            vFIHC(v_population[i]);
         }
 
-		cout << "KONIEC JAZDY Z KURWAMI!" << endl;
+        cout << "KONIEC JAZDY Z KURWAMI!" << endl;
     }
 
-    i_greedy_counter++; 
+    i_greedy_counter++;
 }
 
 CIndividual* COptimizer::pcTournament()
@@ -119,24 +137,52 @@ CIndividual* COptimizer::pcTournament()
 void COptimizer::vFIHC(CIndividual* pc_individual) {
     bool b_improved = true;
 
+    double dCurrentDistanceSum = pc_individual->dEvaluate();
+
+
     while (b_improved) {
         b_improved = false;
 
-        for (int gene_offset : vGenerateRandomOrder()) {
-            double best_fitness = pc_individual->dEvaluate();
-            int best_fitness_gene_value = pc_individual->v_genotype[gene_offset];
+        vector<int> order = vGenerateRandomOrder();
+
+        // Parallelize the loop over gene offsets
+#pragma omp parallel for shared(b_improved)
+        for (int idx = 0; idx < order.size(); idx++) {
+            int gene_offset = order[idx];
+            double best_fitness;
+            int best_fitness_gene_value;
+
+            // Copy the individual's current genotype and fitness locally for each thread
+#pragma omp critical
+            {
+                best_fitness = pc_individual->dEvaluate();
+                best_fitness_gene_value = pc_individual->v_genotype[gene_offset];
+            }
+
             for (int i = c_evaluator.iGetLowerBound(); i <= c_evaluator.iGetUpperBound(); i++) {
                 pc_individual->v_genotype[gene_offset] = i;
                 double current_fitness = pc_individual->dEvaluate();
+
+                // Update the best fitness for this gene offset
                 if (current_fitness < best_fitness) {
+                    best_fitness = current_fitness;
                     best_fitness_gene_value = i;
+
+                    // Update the global improvement flag atomically
+#pragma omp critical
                     b_improved = true;
                 }
             }
-            pc_individual->v_genotype[gene_offset] = best_fitness_gene_value;
+
+            // Restore the best value for this gene offset
+#pragma omp critical
+            {
+                pc_individual->v_genotype[gene_offset] = best_fitness_gene_value;
+            }
         }
     }
 }
+
 
 vector<int> COptimizer::vGenerateRandomOrder()
 {
@@ -147,25 +193,6 @@ vector<int> COptimizer::vGenerateRandomOrder()
     shuffle(order.begin(), order.end(), c_random_engine);
     return order;
 }
-
-// void COptimizer::vRunIteration() {
-//     vector<int> v_candidate(c_evaluator.iGetNumberOfPoints());
-//
-//     uniform_int_distribution<int> c_candidate_distribution(c_evaluator.iGetLowerBound(), c_evaluator.iGetUpperBound());
-//
-//     for (size_t i = 0; i < v_candidate.size(); i++) {
-//         v_candidate[i] = c_candidate_distribution(c_random_engine);
-//     }
-//
-//     double d_candidate_fitness = c_evaluator.dEvaluate(v_candidate);
-//
-//     if (d_candidate_fitness < d_current_best_fitness) {
-//         v_current_best = v_candidate;
-//         d_current_best_fitness = d_candidate_fitness;
-//     }
-//
-//     cout << d_current_best_fitness << endl;
-// }
 
 CIndividual::CIndividual(COptimizer* pcParent) : pc_parent(pcParent), d_fitness(numeric_limits<double>::max()) {
     uniform_int_distribution<int> c_gene_dist(pcParent->c_evaluator.iGetLowerBound(),
@@ -193,11 +220,16 @@ CIndividual& CIndividual::operator=(const CIndividual& individual) {
 
 double CIndividual::dEvaluate() {
     d_fitness = pc_parent->c_evaluator.dEvaluate(v_genotype);
-    if (d_fitness < pc_parent->d_current_best_fitness) {
-        pc_parent->d_current_best_fitness = d_fitness;
-        pc_parent->v_current_best = v_genotype;
-        cout << "New optimum: " << d_fitness << endl;
+
+#pragma omp critical
+    {
+        if (d_fitness < pc_parent->d_current_best_fitness) {
+            pc_parent->d_current_best_fitness = d_fitness;
+            pc_parent->v_current_best = v_genotype;
+            cout << "New optimum: " << std::fixed << std::setprecision(10) << d_fitness << endl;
+        }
     }
+
     return d_fitness;
 }
 

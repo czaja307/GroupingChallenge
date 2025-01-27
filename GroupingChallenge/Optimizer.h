@@ -7,14 +7,16 @@
 #include <numeric>
 #include <random>
 #include <vector>
+#include <iomanip>
+#include "BetterEvaluator.h"
 
 using namespace std;
 
-const int POP_SIZE = 200;
+const int POP_SIZE = 100;
 const double CROSS_PROB = 0.8;
 const double MUT_PROB = 0.05;
-const int GREEDY_INDIVIDUALS = 200;
-const int GREEDY_ITERATIONS = 1000;
+const int GREEDY_INDIVIDUALS = 1.0 * POP_SIZE;
+const int GREEDY_ITERATIONS = 10;
 
 
 namespace NGroupingChallenge {
@@ -32,6 +34,7 @@ namespace NGroupingChallenge {
 
     private:
         CGroupingEvaluator& c_evaluator;
+		CBetterEvaluator* c_better_evaluator;
         mt19937 c_random_engine;
 
         double d_current_best_fitness;
@@ -56,6 +59,7 @@ namespace NGroupingChallenge {
         CIndividual& operator=(const CIndividual& other);
 
         double dEvaluate();
+        double dCheapEvaluate(int iChangedGene, int iNewValue);
 
         void vUniformCrossover(CIndividual* pc_other_parent, CIndividual* pc_offspring1, CIndividual* pc_offspring2);
         void vMutate();

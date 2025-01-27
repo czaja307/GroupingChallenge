@@ -18,6 +18,8 @@ namespace NGroupingChallenge
 		double dEvaluate(const vector<int>* pvSolution) const;
 		double dEvaluate(const vector<int>& vSolution) const;
 
+		const vector<CPoint>& vGetPoints() const { return v_points; }
+
 		int iGetNumberOfPoints() const { return (int)v_points.size(); };
 
 		int iGetLowerBound() const { return 1; };

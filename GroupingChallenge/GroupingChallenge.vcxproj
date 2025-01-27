@@ -115,6 +115,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <OpenMPSupport>true</OpenMPSupport>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -123,12 +124,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="BetterEvaluator.h" />
     <ClInclude Include="GroupingEvaluator.h" />
     <ClInclude Include="GaussianGroupingEvaluatorFactory.h" />
     <ClInclude Include="Optimizer.h" />
     <ClInclude Include="Point.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BetterEvaluator.cpp" />
     <ClCompile Include="GaussianGroupingEvaluatorFactory.cpp" />
     <ClCompile Include="GroupingChallenge.cpp" />
     <ClCompile Include="GroupingEvaluator.cpp" />
