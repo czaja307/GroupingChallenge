@@ -34,7 +34,7 @@ namespace NGroupingChallenge {
 
     private:
         CGroupingEvaluator& c_evaluator;
-		CBetterEvaluator* c_better_evaluator;
+		CBetterEvaluator* pc_better_evaluator;
         mt19937 c_random_engine;
 
         double d_current_best_fitness;
@@ -59,7 +59,6 @@ namespace NGroupingChallenge {
         CIndividual& operator=(const CIndividual& other);
 
         double dEvaluate();
-        double dCheapEvaluate(int iChangedGene, int iNewValue);
 
         void vUniformCrossover(CIndividual* pc_other_parent, CIndividual* pc_offspring1, CIndividual* pc_offspring2);
         void vMutate();

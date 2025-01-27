@@ -5,10 +5,7 @@ using namespace NGroupingChallenge;
 COptimizer::COptimizer(CGroupingEvaluator& cEvaluator)
     : c_evaluator(cEvaluator) {
     random_device c_seed_generator;
-    // TODO: change this
-    //c_random_engine.seed(c_seed_generator());
-    c_random_engine.seed(0);
-	
+    c_random_engine.seed(c_seed_generator());
 }
 
 COptimizer::~COptimizer()
@@ -18,7 +15,7 @@ COptimizer::~COptimizer()
 	}
 	v_population.clear();
 
-	delete c_better_evaluator;
+	delete pc_better_evaluator;
 }
 
 void COptimizer::vInitialize() {
@@ -28,7 +25,7 @@ void COptimizer::vInitialize() {
     v_population.clear();
     i_greedy_counter = 1;
 
-	c_better_evaluator = new CBetterEvaluator(c_evaluator.iGetUpperBound(), c_evaluator.vGetPoints());
+	pc_better_evaluator = new CBetterEvaluator(c_evaluator.iGetUpperBound(), c_evaluator.vGetPoints());
 
 
 #pragma omp parallel for
@@ -137,8 +134,8 @@ CIndividual* COptimizer::pcTournament()
 void COptimizer::vFIHC(CIndividual* pc_individual) {
     bool b_improved = true;
 
+    // Initialize the current fitness sum
     double dCurrentDistanceSum = pc_individual->dEvaluate();
-
 
     while (b_improved) {
         b_improved = false;
@@ -146,27 +143,29 @@ void COptimizer::vFIHC(CIndividual* pc_individual) {
         vector<int> order = vGenerateRandomOrder();
 
         // Parallelize the loop over gene offsets
-#pragma omp parallel for shared(b_improved)
+#pragma omp parallel for shared(b_improved, dCurrentDistanceSum)
         for (int idx = 0; idx < order.size(); idx++) {
             int gene_offset = order[idx];
-            double best_fitness;
-            int best_fitness_gene_value;
+            int best_fitness_gene_value = pc_individual->v_genotype[gene_offset];
+            double best_fitness = dCurrentDistanceSum;
 
-            // Copy the individual's current genotype and fitness locally for each thread
-#pragma omp critical
-            {
-                best_fitness = pc_individual->dEvaluate();
-                best_fitness_gene_value = pc_individual->v_genotype[gene_offset];
-            }
+            // Copy the individual's current fitness locally for each thread
+            bool local_improvement = false;
 
+            // Loop through the possible new gene values
             for (int i = c_evaluator.iGetLowerBound(); i <= c_evaluator.iGetUpperBound(); i++) {
-                pc_individual->v_genotype[gene_offset] = i;
-                double current_fitness = pc_individual->dEvaluate();
+                // Try the new gene value using cheap evaluation
+                double dNewFitnessSum = dCurrentDistanceSum;
+                double dFitnessChange = 0.0;
 
-                // Update the best fitness for this gene offset
-                if (current_fitness < best_fitness) {
-                    best_fitness = current_fitness;
+                // Evaluate the fitness difference caused by changing the gene
+                dFitnessChange = pc_better_evaluator->dCheapEvaluate(pc_individual->v_genotype.data(), gene_offset, i, dNewFitnessSum);
+
+                // If the new fitness is better, update the best value for this gene offset
+                if (dNewFitnessSum < best_fitness) {
+                    best_fitness = dNewFitnessSum;
                     best_fitness_gene_value = i;
+                    local_improvement = true;
 
                     // Update the global improvement flag atomically
 #pragma omp critical
@@ -174,14 +173,21 @@ void COptimizer::vFIHC(CIndividual* pc_individual) {
                 }
             }
 
-            // Restore the best value for this gene offset
-#pragma omp critical
-            {
+            // If improvement was found, apply the best gene value
+            if (local_improvement) {
+                // Update the genotype with the best gene value
                 pc_individual->v_genotype[gene_offset] = best_fitness_gene_value;
+
+                // Update the current distance sum with the new best fitness
+                dCurrentDistanceSum = best_fitness;
             }
         }
     }
+
+	// Evaluate the final individual
+	pc_individual->dEvaluate();
 }
+
 
 
 vector<int> COptimizer::vGenerateRandomOrder()

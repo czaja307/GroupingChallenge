@@ -31,13 +31,7 @@ int main()
 
 	c_optimizer.vInitialize();
 
-	//#pragma omp parallel for
-	//for (int i = 0; i < 10; i++) {
-	//	Sleep(1000);  // Sleep for 1 second to simulate work
-	//	cout << "dupa" << endl;	
-	//}
-
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 10000; i++)
 	{
 		cout << "Iteration: " << i << endl;
 		c_optimizer.vRunIteration();
