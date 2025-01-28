@@ -24,12 +24,13 @@ void COptimizer::vInitialize() {
     v_current_best.resize(c_evaluator.iGetNumberOfPoints());
     v_population.clear();
     i_greedy_counter = 1;
+	i_reset_counter = 1;
 
 	pc_better_evaluator = new CBetterEvaluator(c_evaluator.iGetUpperBound(), c_evaluator.vGetPoints());
 
 
 #pragma omp parallel for
-    for (int i = 0; i < POP_SIZE; i++) {
+    for (int i = 0; i < I_POP_SIZE; i++) {
         CIndividual* individual = new CIndividual(this);
         individual->dEvaluate();
 #pragma omp critical
@@ -46,7 +47,7 @@ void COptimizer::vRunIteration() {
         vector<CIndividual*> thread_population;
 
 #pragma omp for nowait
-        for (int i = 0; i < POP_SIZE / 2; i++) {
+        for (int i = 0; i < I_POP_SIZE / 2; i++) {
             CIndividual* parent1 = pcTournament();
             CIndividual* parent2 = pcTournament();
 
@@ -78,7 +79,7 @@ void COptimizer::vRunIteration() {
     }
     v_population.swap(v_new_population);
 
-    while (v_population.size() > POP_SIZE) {
+    while (v_population.size() > I_POP_SIZE) {
         delete v_population.back();
         v_population.pop_back();
     }
@@ -89,25 +90,64 @@ void COptimizer::vRunIteration() {
         v_population[i]->dEvaluate();
     }
 
-    if (i_greedy_counter == GREEDY_ITERATIONS) {
+    if (i_greedy_counter == I_GREEDY_ITERATIONS) {
         cout << "JAZDA Z KURWAMI AUUUUUU!" << endl;
         i_greedy_counter = 0;
-        shuffle(v_population.begin(), v_population.end(), c_random_engine);
 
 #pragma omp parallel for
-        for (int i = 0; i < GREEDY_INDIVIDUALS; i++) {
+        for (int i = 0; i < I_POP_SIZE; i++) {
+            CIndividual* new_individual = new CIndividual(this);
+#pragma omp critical
+            v_population.push_back(new_individual);
+        }
+
+#pragma omp parallel for
+        for (int i = 0; i < v_population.size(); i++) {
             vFIHC(v_population[i]);
         }
+
+        // Sort population by fitness (higher fitness first)
+        std::sort(v_population.begin(), v_population.end(), [](CIndividual* a, CIndividual* b) {
+            return a->dEvaluate() > b->dEvaluate();
+            });
+
+        // Remove and deallocate the less fit half of the population
+        for (size_t i = I_POP_SIZE; i < v_population.size(); i++) {
+            delete v_population[i];  // Free memory for removed individuals
+        }
+        v_population.resize(I_POP_SIZE);
 
         cout << "KONIEC JAZDY Z KURWAMI!" << endl;
     }
 
+	if (i_reset_counter == I_RESET_ITERATIONS) {
+		cout << "RESET!" << endl;
+		i_reset_counter = 0;
+
+		//Delete all individuals and create new ones
+		for (int i = 0; i < v_population.size(); i++) {
+			delete v_population[i];
+		}
+		v_population.clear();
+
+#pragma omp parallel for
+		for (int i = 0; i < I_POP_SIZE; i++) {
+			CIndividual* individual = new CIndividual(this);
+			individual->dEvaluate();
+#pragma omp critical
+			v_population.push_back(individual);
+		}
+
+		cout << "RESET ZAKONCZONY!" << endl;
+	}
+
     i_greedy_counter++;
+	i_reset_counter++;
 }
 
 CIndividual* COptimizer::pcTournament()
 {
-	uniform_int_distribution<int> parent_dist(0, POP_SIZE - 1);
+	uniform_int_distribution<int> parent_dist(0, I_POP_SIZE - 1);
 
 	int parent1_index = parent_dist(c_random_engine);
 	int parent2_index = parent_dist(c_random_engine);
@@ -243,7 +283,7 @@ void CIndividual::vUniformCrossover(CIndividual* pc_other_parent, CIndividual* p
     uniform_real_distribution<double> prob_dist(0.0, 1.0);
     uniform_int_distribution<int> value_dist(0, 1);
 
-    if (prob_dist(pc_parent->c_random_engine) < MUT_PROB) {
+    if (prob_dist(pc_parent->c_random_engine) < D_MUT_PROB) {
         for (size_t i = 0; i < v_genotype.size(); i++) {
             pc_offspring1->v_genotype[i] = value_dist(pc_parent->c_random_engine) ? v_genotype[i] : pc_other_parent->v_genotype[i];
 			pc_offspring2->v_genotype[i] = value_dist(pc_parent->c_random_engine) ? pc_other_parent->v_genotype[i] : v_genotype[i];
@@ -261,7 +301,7 @@ void CIndividual::vMutate() {
     uniform_int_distribution<int> value_dist(pc_parent->c_evaluator.iGetLowerBound(), pc_parent->c_evaluator.iGetUpperBound());
 
     for (int& gene : v_genotype) {
-        if (prob_dist(pc_parent->c_random_engine) < MUT_PROB) {
+        if (prob_dist(pc_parent->c_random_engine) < D_MUT_PROB) {
             gene = value_dist(pc_parent->c_random_engine);
         }
     }

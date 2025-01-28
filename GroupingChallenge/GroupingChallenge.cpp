@@ -11,7 +11,7 @@ using namespace NGroupingChallenge;
 int main()
 {
 	auto start_time = std::chrono::high_resolution_clock::now();
-	CGaussianGroupingEvaluatorFactory c_evaluator_factory(10, 1000, 1);
+	CGaussianGroupingEvaluatorFactory c_evaluator_factory(100, 500, 10);
 
 	c_evaluator_factory
 		.cAddDimension(-100, 100, 1.0, 1.0)
@@ -31,9 +31,9 @@ int main()
 
 	c_optimizer.vInitialize();
 
-	for (int i = 0; i < 10000; i++)
+	for (int i = 0; i < 4000; i++)
 	{
-		cout << "Iteration: " << i << endl;
+		//cout << "Iteration: " << i << endl;
 		c_optimizer.vRunIteration();
 	}
 

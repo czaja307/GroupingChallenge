@@ -12,12 +12,11 @@
 
 using namespace std;
 
-const int POP_SIZE = 100;
-const double CROSS_PROB = 0.8;
-const double MUT_PROB = 0.05;
-const int GREEDY_INDIVIDUALS = 1.0 * POP_SIZE;
-const int GREEDY_ITERATIONS = 10;
-
+const int I_POP_SIZE = 200;
+const double D_CROSS_PROB = 0.8;
+const double D_MUT_PROB = 1;
+const int I_GREEDY_ITERATIONS = 100;
+const int I_RESET_ITERATIONS = 5 * I_GREEDY_ITERATIONS;
 
 namespace NGroupingChallenge {
     class COptimizer {
@@ -43,6 +42,7 @@ namespace NGroupingChallenge {
         vector<CIndividual*> v_population;
 
 		int i_greedy_counter;
+		int i_reset_counter;
 
 		CIndividual* pcTournament();
         void vFIHC(CIndividual* pc_individual);
