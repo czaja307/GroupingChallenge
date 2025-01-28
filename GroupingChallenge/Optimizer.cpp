@@ -3,7 +3,8 @@
 using namespace NGroupingChallenge;
 
 COptimizer::COptimizer(CGroupingEvaluator& cEvaluator)
-    : c_evaluator(cEvaluator) {
+    : c_evaluator(cEvaluator)
+{
     random_device c_seed_generator;
     c_random_engine.seed(c_seed_generator());
 }
@@ -20,7 +21,7 @@ COptimizer::~COptimizer()
 
 void COptimizer::vInitialize() {
     d_current_best_fitness = std::numeric_limits<double>::max();
-    v_current_best.clear();
+    v_current_best.clear(); 
     v_current_best.resize(c_evaluator.iGetNumberOfPoints());
     v_population.clear();
     i_greedy_counter = 1;
@@ -41,7 +42,6 @@ void COptimizer::vInitialize() {
 void COptimizer::vRunIteration() {
     vector<CIndividual*> v_new_population;
 
-    // Parallelize creation of new individuals
 #pragma omp parallel
     {
         vector<CIndividual*> thread_population;
@@ -84,14 +84,12 @@ void COptimizer::vRunIteration() {
         v_population.pop_back();
     }
 
-    // Parallelize fitness evaluation
 #pragma omp parallel for
     for (int i = 0; i < v_population.size(); i++) {
         v_population[i]->dEvaluate();
     }
 
     if (i_greedy_counter == I_GREEDY_ITERATIONS) {
-        cout << "JAZDA Z KURWAMI AUUUUUU!" << endl;
         i_greedy_counter = 0;
 
 #pragma omp parallel for
@@ -106,25 +104,19 @@ void COptimizer::vRunIteration() {
             vFIHC(v_population[i]);
         }
 
-        // Sort population by fitness (higher fitness first)
         std::sort(v_population.begin(), v_population.end(), [](CIndividual* a, CIndividual* b) {
             return a->dEvaluate() > b->dEvaluate();
             });
 
-        // Remove and deallocate the less fit half of the population
-        for (size_t i = I_POP_SIZE; i < v_population.size(); i++) {
-            delete v_population[i];  // Free memory for removed individuals
+        for (int i = I_POP_SIZE; i < v_population.size(); i++) {
+            delete v_population[i];
         }
         v_population.resize(I_POP_SIZE);
-
-        cout << "KONIEC JAZDY Z KURWAMI!" << endl;
     }
 
 	if (i_reset_counter == I_RESET_ITERATIONS) {
-		cout << "RESET!" << endl;
 		i_reset_counter = 0;
 
-		//Delete all individuals and create new ones
 		for (int i = 0; i < v_population.size(); i++) {
 			delete v_population[i];
 		}
@@ -137,8 +129,6 @@ void COptimizer::vRunIteration() {
 #pragma omp critical
 			v_population.push_back(individual);
 		}
-
-		cout << "RESET ZAKONCZONY!" << endl;
 	}
 
     i_greedy_counter++;
@@ -152,7 +142,6 @@ CIndividual* COptimizer::pcTournament()
 	int parent1_index = parent_dist(c_random_engine);
 	int parent2_index = parent_dist(c_random_engine);
 
-    // Ensure parent2 is different from parent1
     while (parent2_index == parent1_index)
     {
         parent2_index = parent_dist(c_random_engine);
@@ -174,7 +163,6 @@ CIndividual* COptimizer::pcTournament()
 void COptimizer::vFIHC(CIndividual* pc_individual) {
     bool b_improved = true;
 
-    // Initialize the current fitness sum
     double dCurrentDistanceSum = pc_individual->dEvaluate();
 
     while (b_improved) {
@@ -182,49 +170,38 @@ void COptimizer::vFIHC(CIndividual* pc_individual) {
 
         vector<int> order = vGenerateRandomOrder();
 
-        // Parallelize the loop over gene offsets
 #pragma omp parallel for shared(b_improved, dCurrentDistanceSum)
         for (int idx = 0; idx < order.size(); idx++) {
             int gene_offset = order[idx];
             int best_fitness_gene_value = pc_individual->v_genotype[gene_offset];
             double best_fitness = dCurrentDistanceSum;
 
-            // Copy the individual's current fitness locally for each thread
             bool local_improvement = false;
 
-            // Loop through the possible new gene values
             for (int i = c_evaluator.iGetLowerBound(); i <= c_evaluator.iGetUpperBound(); i++) {
-                // Try the new gene value using cheap evaluation
                 double dNewFitnessSum = dCurrentDistanceSum;
                 double dFitnessChange = 0.0;
 
-                // Evaluate the fitness difference caused by changing the gene
                 dFitnessChange = pc_better_evaluator->dCheapEvaluate(pc_individual->v_genotype.data(), gene_offset, i, dNewFitnessSum);
 
-                // If the new fitness is better, update the best value for this gene offset
                 if (dNewFitnessSum < best_fitness) {
                     best_fitness = dNewFitnessSum;
                     best_fitness_gene_value = i;
                     local_improvement = true;
 
-                    // Update the global improvement flag atomically
 #pragma omp critical
                     b_improved = true;
                 }
             }
 
-            // If improvement was found, apply the best gene value
             if (local_improvement) {
-                // Update the genotype with the best gene value
                 pc_individual->v_genotype[gene_offset] = best_fitness_gene_value;
 
-                // Update the current distance sum with the new best fitness
                 dCurrentDistanceSum = best_fitness;
             }
         }
     }
 
-	// Evaluate the final individual
 	pc_individual->dEvaluate();
 }
 

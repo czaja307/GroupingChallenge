@@ -1,17 +1,12 @@
 #include "GaussianGroupingEvaluatorFactory.h"
 #include "GroupingEvaluator.h"
 #include "Optimizer.h"
-//TODO: remove
-#include <iostream>
-#include <chrono>
-#include <windows.h>
 
 using namespace NGroupingChallenge;
 
 int main()
 {
-	auto start_time = std::chrono::high_resolution_clock::now();
-	CGaussianGroupingEvaluatorFactory c_evaluator_factory(100, 500, 10);
+	CGaussianGroupingEvaluatorFactory c_evaluator_factory(5, 100, 5);
 
 	c_evaluator_factory
 		.cAddDimension(-100, 100, 1.0, 1.0)
@@ -31,18 +26,12 @@ int main()
 
 	c_optimizer.vInitialize();
 
-	for (int i = 0; i < 4000; i++)
+	for (int i = 0; i < 10; i++)
 	{
-		//cout << "Iteration: " << i << endl;
 		c_optimizer.vRunIteration();
 	}
 
 	delete pc_evaluator;
-
-	auto end_time = std::chrono::high_resolution_clock::now(); // End timing
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-
-	std::cout << "Program runtime: " << duration.count() << " milliseconds" << std::endl;
 
 	return 0;
 }
